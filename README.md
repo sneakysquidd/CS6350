@@ -1,2 +1,2 @@
-# CS6350
-Course work for CS 6350 Fall 2023
+This is a machine learning library developed by Gavin Thomas for
+CS5350/6350 in University of Utah
