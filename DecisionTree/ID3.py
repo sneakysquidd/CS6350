@@ -3,18 +3,37 @@ import pandas as pd
 import math
 import numpy as np
 
-def ID3(S, Attributes, Label):
-    all_same_label = True
-    labels = []
-    for example in S:
-        if example[-1] not in labels:
-            labels.append(example[-1])
-        if len(labels) > 1:
-            all_same_label = False
-            break
 
-    if all_same_label:
+def ID3(S, Attributes):
+    labels = np.unique(S.iloc[:, -1:])
+    if len(labels) == 1:
         return Tree.Node(labels[0])
+    if len(Attributes) == 0:
+        return Tree.Node(S.iloc[:, -1:].mode().iloc[0,0])
+
+    best_gain = 0
+    best_a = -1
+    for a in Attributes:
+        ig = informationGain(S, a)
+        if ig > best_gain:
+            best_gain = ig
+            best_a = a
+
+    root = Tree.Node(best_a)
+    attr_vals = np.unique(S[best_a])
+
+    # for each possible value that the best attribute can take
+    for av in attr_vals:
+        branch = Tree.Node(av)
+        av_data = S[S[best_a] == av]
+        if av_data.empty:
+            branch.children.append(Tree.Node(S.iloc[:, -1:].mode().iloc[0, 0]))
+        else:
+            unused_attributes = Attributes.copy()
+            unused_attributes.remove(best_a)
+            branch.children.append(ID3(av_data, unused_attributes))
+        root.children.append(branch)
+    return root
 
 def readData(file):
     with open(file, 'r') as f:
@@ -22,27 +41,28 @@ def readData(file):
             terms = line.strip().split(',')
 
 
-def entropy(data, vals):
-    value_counts = {v: 0 for v in vals}
+def entropy(data):
+    vals = np.unique(data.iloc[:, -1:])
 
-    for example in data:
-        label_val = example[-1]
-        value_counts[label_val] += 1
-    entropy = 0
+    val_counts = data.iloc[:, -1:].value_counts()
+    value_counts = {i[0][0]: i[1] for i in val_counts.items()}
+
+    e = 0
     for v in value_counts:
         p_i = value_counts[v] / len(data)
-        entropy += p_i * math.log(p_i, 2)
-    return -entropy
+        e += p_i * math.log(p_i, 2)
+    return -e
 
 
-def informationGain(data, attr, vals):
-    gain = entropy(data, vals)
+def informationGain(data, attr):
+    ig = entropy(data)
     attr_values = np.unique(data[attr])
     for av in attr_values:
+        attr_data = data[data[attr] == av]
+        attr_entropy = entropy(attr_data)
+        ig -= (len(attr_data) / len(data)) * attr_entropy
+    return ig
 
-
-def getLabelValues(data):
-    values = []
-    for example in data:
-        if example[-1] not in values:
-            values.append(example[-1])
+data = pd.read_csv("E:\\2023 school\\6350\decisionTree\car-4\\test.csv", header=None)
+attributes = [i for i in range(len(data.columns) - 1)]
+ID3(data, attributes)
