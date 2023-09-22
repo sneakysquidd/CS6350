@@ -1,116 +1,95 @@
-import Tree
 import pandas as pd
-import math
 import numpy as np
 
 
-def ID3(S, Attributes, label, func, depth, max_depth):
-    labels = np.unique(S[label])
-    if len(labels) == 1:
-        temp = Tree.Node(labels[0], depth + 1)
-        temp.isLeaf = True
-        return temp
-    if len(Attributes) == 0:
-        temp = Tree.Node(S[label].mode()[0], depth + 1)
-        temp.isLeaf = True
-        return temp
-
-    best_gain = 0
-    best_a = ""
-    for a in Attributes:
-        ig = informationGain(S, a, func, label)
-        if ig > best_gain:
-            best_gain = ig
-            best_a = a
-
-    root = Tree.Node(best_a, depth)
-    attr_vals = np.unique(S[best_a])
-
-    # for each possible value that the best attribute can take
-    for av in attr_vals:
-        branch = Tree.Node(av, depth)
-        av_data = S[S[best_a] == av]
-        if depth == max_depth - 1:
-            if av_data.empty:
-                temp = Tree.Node(S[label].mode()[0], depth + 1)
-                temp.isLeaf = True
-                branch.children.append(temp)
-            else:
-                temp = Tree.Node(av_data[label].mode()[0], depth + 1)
-                temp.isLeaf = True
-                branch.children.append(temp)
-        else:
-            if av_data.empty:
-                temp = Tree.Node(S[label].mode()[0], depth + 1)
-                temp.isLeaf = True
-                branch.children.append(temp)
-            else:
-                unused_attributes = Attributes.copy()
-                unused_attributes.remove(best_a)
-                branch.children.append(ID3(av_data, unused_attributes, label, func, depth + 1, max_depth))
-        root.children.append(branch)
-    return root
+class Node:
+    def __init__(self, attribute=None, label=None):
+        self.attribute = attribute
+        self.label = label
+        self.children = {}
 
 
-def entropy(data, label):
-    vals = np.unique(data.iloc[:, -1:])
-
-    val_counts = data[label].value_counts()
-    value_counts = {i[0][0]: i[1] for i in val_counts.items()}
-
-    e = 0
-    for v in value_counts:
-        p_i = value_counts[v] / len(data)
-        e += p_i * math.log(p_i, 2)
-    return -e
+def entropy(data):
+    unique, counts = np.unique(data, return_counts=True)
+    probabilities = counts / len(data)
+    return -np.sum(probabilities * np.log2(probabilities))
 
 
-def majorityError(data, label):
+def majority_error(data):
     total = data.shape[0]
-    val_counts = data[label].value_counts()
-    value_counts = [i[1] for i in val_counts.items()]
-    return (total - max(value_counts)) / total
+    unique, counts = np.unique(data, return_counts=True)
+    return (total - max(counts)) / total
 
 
-def giniIndex(data, label):
+def gini_index(data):
     total = data.shape[0]
-    val_counts = data[label].value_counts()
-    value_props = [i[1] / total for i in val_counts.items()]
+    unique, counts = np.unique(data, return_counts=True)
+    value_props = counts / total
     gi = 1
     for p in value_props:
         gi -= p**2
     return gi
 
 
-def informationGain(data, attr, func, label):
-    purity_func = lambda x : x
-    if func == 0:
-        purity_func = entropy
-    if func == 1:
-        purity_func = majorityError
-    if func == 2:
-        purity_func = giniIndex
-
-    ig = purity_func(data, label)
-    attr_values = np.unique(data[attr])
-    for av in attr_values:
-        attr_data = data[data[attr] == av]
-        attr_purity = purity_func(attr_data, label)
-        ig -= (len(attr_data) / len(data)) * attr_purity
-    return ig
+def information_gain(data, attribute, class_attr, purity_func):
+    total_entropy = purity_func(data[class_attr])
+    values, counts = np.unique(data[attribute], return_counts=True)
+    weighted_entropy = np.sum(
+        [(counts[i] / len(data)) * entropy(data.where(data[attribute] == values[i]).dropna()[class_attr]) for i in
+         range(len(values))])
+    return total_entropy - weighted_entropy
 
 
-def classify(root, data):
-    for child in root.children:
-        if child.data == data[0]:
-            
+def id3(data, attributes, class_attr, purity_func, max_depth = 9999999, curr_depth = 0):
+    if curr_depth >= max_depth or len(attributes) == 0:
+        return Node(label=data[class_attr].mode().iloc[0])
+    if len(np.unique(data[class_attr])) == 1:
+        return Node(label=data[class_attr].iloc[0])
+
+    best_attribute = max(attributes, key=lambda attr: information_gain(data, attr, class_attr, purity_func))
+    root = Node(attribute=best_attribute)
+
+    for value in np.unique(data[best_attribute]):
+        subset = data.where(data[best_attribute] == value).dropna()
+        if len(subset) == 0:
+            root.children[value] = Node(label=data[class_attr].mode().iloc[0])
+        else:
+            root.children[value] = id3(subset, [attr for attr in attributes if attr != best_attribute], class_attr, purity_func, max_depth, curr_depth + 1)
+
+    return root
+
+
+def predict(tree, data_point):
+    if tree.label is not None:
+        return tree.label
+    attribute = tree.attribute
+    if data_point[attribute] not in tree.children:
+        child_labels = [child.label for child in tree.children.values()]
+        return max(set(child_labels), key=child_labels.count)
+    return predict(tree.children[data_point[attribute]], data_point)
 
 
 test_data = pd.read_csv("E:\\2023 school\\6350\decisionTree\car-4\\test.csv", header=None, names=["buying","maint","doors","persons","lug_boot","safety","label"])
 train_data = pd.read_csv("E:\\2023 school\\6350\decisionTree\car-4\\train.csv", header=None, names=["buying","maint","doors","persons","lug_boot","safety","label"])
 attributes = ["buying","maint","doors","persons","lug_boot","safety"]
+tree = id3(train_data, attributes, "label", entropy)
+
+total = 0
+wrong = 0
+
+
 for i in range(1,7):
-    tree = ID3(train_data, attributes, "label", 0, 0, i)
+    tree = id3(train_data, attributes, "label", gini_index, i)
     for index, r in test_data.iterrows():
-        #
+        prediction = predict(tree, r)
+        if prediction != r["label"]:
+            wrong += 1
+        total += 1
+    print(f"Error %: {wrong/total} max depth: {i} Data: Test")
+    for index, r in train_data.iterrows():
+        prediction = predict(tree, r)
+        if prediction != r["label"]:
+            wrong += 1
+        total += 1
+    print(f"Error %: {wrong/total} max depth: {i} Data: Train")
 
