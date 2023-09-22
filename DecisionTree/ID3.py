@@ -49,6 +49,10 @@ def id3(data, attributes, class_attr, purity_func, max_depth = 9999999, curr_dep
     best_attribute = max(attributes, key=lambda attr: information_gain(data, attr, class_attr, purity_func))
     root = Node(attribute=best_attribute)
 
+    if data.dtypes[best_attribute] == np.int64 or data.dtypes[best_attribute] == np.float64:
+        median = data[best_attribute].median()
+        data[best_attribute] = pd.cut(data[best_attribute], [-float("inf"), median, float("inf")], labels=[f"<= {median}", f"> {median}"])
+
     for value in np.unique(data[best_attribute]):
         subset = data.where(data[best_attribute] == value).dropna()
         if len(subset) == 0:
@@ -63,33 +67,40 @@ def predict(tree, data_point):
     if tree.label is not None:
         return tree.label
     attribute = tree.attribute
+
+    
     if data_point[attribute] not in tree.children:
         child_labels = [child.label for child in tree.children.values()]
         return max(set(child_labels), key=child_labels.count)
     return predict(tree.children[data_point[attribute]], data_point)
 
 
-test_data = pd.read_csv("E:\\2023 school\\6350\decisionTree\car-4\\test.csv", header=None, names=["buying","maint","doors","persons","lug_boot","safety","label"])
-train_data = pd.read_csv("E:\\2023 school\\6350\decisionTree\car-4\\train.csv", header=None, names=["buying","maint","doors","persons","lug_boot","safety","label"])
-attributes = ["buying","maint","doors","persons","lug_boot","safety"]
-tree = id3(train_data, attributes, "label", entropy)
-
-total = 0
-wrong = 0
+train_data = pd.read_csv("E:\\2023 school\\6350\decisionTree\\bank-4\\train.csv", header=None, names=["age","job","marital","education","default","balance","housing","loan","contact","day","month","duration","campaign","pdays","previous","poutcome","y"])
+test_data = pd.read_csv("E:\\2023 school\\6350\decisionTree\\bank-4\\test.csv", header=None, names=["age","job","marital","education","default","balance","housing","loan","contact","day","month","duration","campaign","pdays","previous","poutcome","y"])
+tree = id3(train_data, ["age","job","marital","education","default","balance","housing","loan","contact","day","month","duration","campaign","pdays","previous","poutcome"], "y", entropy, max_depth = 2)
 
 
-for i in range(1,7):
-    tree = id3(train_data, attributes, "label", gini_index, i)
-    for index, r in test_data.iterrows():
-        prediction = predict(tree, r)
-        if prediction != r["label"]:
-            wrong += 1
-        total += 1
-    print(f"Error %: {wrong/total} max depth: {i} Data: Test")
-    for index, r in train_data.iterrows():
-        prediction = predict(tree, r)
-        if prediction != r["label"]:
-            wrong += 1
-        total += 1
-    print(f"Error %: {wrong/total} max depth: {i} Data: Train")
+# test_data = pd.read_csv("E:\\2023 school\\6350\decisionTree\car-4\\test.csv", header=None, names=["buying","maint","doors","persons","lug_boot","safety","label"])
+# train_data = pd.read_csv("E:\\2023 school\\6350\decisionTree\\bank-4\\train.csv", header=None, names=["buying","maint","doors","persons","lug_boot","safety","label"])
+# attributes = ["buying","maint","doors","persons","lug_boot","safety"]
+# tree = id3(train_data, attributes, "label", entropy)
+#
+# total = 0
+# wrong = 0
+#
+#
+# for i in range(1,7):
+#     tree = id3(train_data, attributes, "label", gini_index, i)
+#     for index, r in test_data.iterrows():
+#         prediction = predict(tree, r)
+#         if prediction != r["label"]:
+#             wrong += 1
+#         total += 1
+#     print(f"Error %: {wrong/total} max depth: {i} Data: Test")
+#     for index, r in train_data.iterrows():
+#         prediction = predict(tree, r)
+#         if prediction != r["label"]:
+#             wrong += 1
+#         total += 1
+#     print(f"Error %: {wrong/total} max depth: {i} Data: Train")
 
