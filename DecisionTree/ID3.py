@@ -68,8 +68,13 @@ def predict(tree, data_point):
         return tree.label
     attribute = tree.attribute
 
-    
-    if data_point[attribute] not in tree.children:
+    if data_point.dtypes[attribute] == np.int64 or data_point.dtypes[attribute] == np.float64:
+        for attribute_val in tree.children:
+            if eval(data_point[attribute] + attribute_val):
+                data_value = attribute_val
+    else:
+        data_value = data_point[attribute]
+    if data_value not in tree.children:
         child_labels = [child.label for child in tree.children.values()]
         return max(set(child_labels), key=child_labels.count)
     return predict(tree.children[data_point[attribute]], data_point)
